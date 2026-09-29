@@ -87,7 +87,16 @@ def render_dashboard_html() -> str:
     mean_quality = round(sum(quality_scores) / len(quality_scores), 2) if quality_scores else 0.0
 
     # Threshold checks
-    lat_status = "PASS" if p95 <= 3000 else "BREACH"
+    lat_threshold = 2000
+    challenge_path = Path("config/challenge.json")
+    if challenge_path.exists():
+        try:
+            ch_data = json.loads(challenge_path.read_text(encoding="utf-8"))
+            lat_threshold = ch_data.get("latency_threshold_ms", 2000)
+        except Exception:
+            pass
+
+    lat_status = "PASS" if p95 <= lat_threshold else "BREACH"
     err_status = "PASS" if error_rate_pct <= 2.0 and tool_success_pct >= 90.0 else "BREACH"
     cost_status = "PASS" if total_cost <= 2.5 else "BREACH"
     token_status = "PASS" if total_tokens <= 50000 else "BREACH"
@@ -229,7 +238,7 @@ def render_dashboard_html() -> str:
                 <div>• P50: <b>{p50:.1f} ms</b> | P99: <b>{p99:.1f} ms</b></div>
                 <div>• TTFT P95: <b>{ttft_p95:.1f} ms</b></div>
             </div>
-            <div class="threshold-line">SLO Threshold: P95 &le; 3000 ms</div>
+            <div class="threshold-line">Threshold: P95 &le; {lat_threshold} ms (Challenge Target)</div>
         </div>
 
         <!-- Panel 2: Traffic -->

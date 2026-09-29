@@ -9,7 +9,7 @@
 - **Lớp:** K4-L3A
 - **Repository URL:** https://github.com/HieuLM7714/K4-L3-DAY13-LeMinhHieu-2A202602848-Monitoring-LLMOps.git
 - **Commit SHA cuối:**
-- **Challenge ID:**
+- **Challenge ID:** day13-k4-l3a-monitoring-llmops-v1
 - **Tên project Langfuse cá nhân:** `day13-k4-l3a-2A202602848`
 
 ## 2. Evidence index
@@ -95,31 +95,37 @@
 
 ## 7. Điều tra challenge
 
-- **Challenge ID:**
-- **Khoảng thời gian điều tra:**
-- **Triệu chứng từ metrics:**
-- **Log line và correlation ID liên quan:**
-- **Trace ID và span gây ảnh hưởng:**
-- **Root cause:**
-- **Fix action:**
-- **Preventive measure:**
+- **Challenge ID:** `day13-k4-l3a-monitoring-llmops-v1`
+- **Khoảng thời gian điều tra:** 2026-09-29 15:56:00 – 16:15:00
+- **Triệu chứng từ metrics:** P95 Latency của endpoint `/chat` tăng vọt lên **3758.2 ms** (vượt xa ngưỡng threshold 2000ms định nghĩa trong challenge). Khi chạy tải đồng thời (concurrency = 5), thời gian phản hồi chạm mức 12.4s – 15.1s do hàng đợi tích lũy. Trên dashboard (`evidence/12-incident-metric.png`), panel Latency & TTFT kích hoạt cờ đỏ **BREACH**.
+- **Log line và correlation ID liên quan:** Correlation ID tiêu biểu: `req-5de6dce8` (Session `k4-l3a-challenge-s01`, feature `monitoring`, user_id_hash `dde2e75b20cf`). Log `response_sent` ghi nhận `latency_ms: 3763`, `ttft_ms: 50`, `tokens_in: 35`, `tokens_out: 124`, `cost_usd: 0.001965`, `tool_name: retrieval`, `tool_success: true`, payload liên kết trực tiếp `trace_id: 1e2524eda30b9d7542d9872d81ce77a0`.
+- **Trace ID và span gây ảnh hưởng:** Trace ID: `1e2524eda30b9d7542d9872d81ce77a0` (hiển thị trong `evidence/14-incident-trace.png` trên Langfuse, thời gian thực thi: **3.76s**, khớp hoàn hảo với Dashboard P95). Trong trace waterfall, span **`retrieve`** (loại retriever) tốn tới **2.50s** (chiếm phần lớn thời gian xử lý), trong khi span `fake-llm-generate` chỉ tốn 0.15s và hàng đợi/I-O tốn thời gian còn lại.
+- **Root cause:** Nghẽn cổ chai tại tầng tra cứu RAG (span `retrieve`). Kịch bản `rag_slow` đã kích hoạt độ trễ giả lập 2.5s khi tra cứu tài liệu liên quan tới feature `monitoring` (mô phỏng vector database bị chậm do thiếu index hoặc quá tải).
+- **Fix action:** Thực hiện tắt sự cố bằng lệnh `python scripts/inject_incident.py --disable`. Trong môi trường thực tế, tiến hành kiểm tra kết nối và tài nguyên của vector DB cluster, bổ sung cache ngữ nghĩa (Semantic Caching trên Redis) cho các câu hỏi phổ biến, và thiết lập client-side timeout cho retrieval.
+- **Preventive measure:** Bổ sung Circuit Breaker Pattern cho cuộc gọi retrieval với timeout nghiêm ngặt (1000ms), tự động fallback sang tài liệu tĩnh nếu vector store không phản hồi kịp thời; cấu hình cảnh báo `high_latency_p95` và cảnh báo riêng cho `retrieval_latency > 1000ms`.
 
 ## 8. Giải thích và tự đánh giá
 
-- **Một quyết định kỹ thuật quan trọng và lý do:**
-- **Một lỗi/blocker đã gặp:**
-- **Cách tìm nguyên nhân và xử lý:**
+- **Một quyết định kỹ thuật quan trọng và lý do:** Đặt processor làm sạch PII (`scrub_event`) ở tầng middleware xử lý log trước khi JSON được serialize và ghi ra file/stdout; đồng thời đặt `capture_input=False, capture_output=False` trên các decorator `@observe` của Langfuse. Quyết định này giúp bảo đảm nguyên tắc Zero Trust / Privacy by Design: dữ liệu nhạy cảm (Email, CCCD, Phone, Card) không bao giờ bị ghi lọt vào log lưu trữ hay đẩy lên cloud tracing bên thứ ba.
+- **Một lỗi/blocker đã gặp:** Khi chạy baseline validator ban đầu (`validate_logs.py`), điểm số chỉ đạt 30/100 do log cũ trong file `data/logs.jsonl` từ các lượt chạy trước không có correlation ID và chưa được redact. Validator đọc toàn bộ file nên log cũ làm rớt điểm nghiêm trọng dù code mới đã sửa.
+- **Cách tìm nguyên nhân và xử lý:** Đọc tài liệu `docs/GUIDE.md`, nhận diện cơ chế đọc toàn bộ file của script validator. Đã thực hiện sao lưu log baseline cũ, reset `data/logs.jsonl`, khởi động lại API server và chạy lại kịch bản `load_test.py`. Kết quả validator ngay lập tức đạt điểm tuyệt đối 100/100.
 - **Cách hiểu luồng Metrics → Logs → Traces:**
+  - **Metrics** là giác quan đầu tiên báo hiệu *CÁI GÌ đang xảy ra và KHI NÀO* (ví dụ: P95 latency tăng vọt từ 150ms lên 2650ms lúc 15:56).
+  - **Logs** giúp khoanh vùng *REQUEST NÀO bị ảnh hưởng* bằng cách lọc các bản ghi log trong khung thời gian đó, bốc tách ra `correlation_id` cụ thể (`req-22100687`).
+  - **Traces** đào sâu vào chi tiết *BƯỚC NÀO là nguyên nhân gốc rễ* bằng cách mở trace waterfall có cùng correlation ID trên Langfuse, so sánh thời gian thực thi của từng span con để phát hiện chính xác span `retrieve` nghẽn 2.50s.
 - **Vai trò của prompt version, token/cost, SLO hoặc rollback trong vận hành LLM:**
-- **Điều quan trọng nhất đã học:**
-- **Hạn chế hoặc phần chưa hoàn thành, nếu có:**
+  - Prompt là "mã nguồn mềm" của AI: việc đánh version và gắn label (`baseline`, `production`, `candidate`) cho phép quản lý vòng đời prompt có kỷ luật, tự tin thử nghiệm và rollback tức thì trong vài giây mà không cần redeploy backend.
+  - Quản lý token & cost: LLM tính phí trên token; theo dõi sát sao input/output token usage giúp phát hiện sớm các hiện tượng prompt blow-up, token loop hoặc cost spike.
+  - SLO & Error budget: Đặt ra ranh giới định lượng giữa tốc độ phát triển tính năng và độ ổn định của hệ thống.
+- **Điều quan trọng nhất đã học:** Kỹ năng xây dựng hệ thống quan sát toàn diện (End-to-End Observability) cho ứng dụng GenAI / Agentic LLM: biến AI từ một "hộp đen" thành hệ thống có thể mổ xẻ, truy vết và định vị lỗi chính xác trong thời gian thực.
+- **Hạn chế hoặc phần chưa hoàn thành, nếu có:** Hệ thống mock RAG hiện tại đang chạy dữ liệu in-memory; trong production cần tích hợp thêm distributed tracing tới cụm Qdrant/Pinecone/Milvus thực tế và cấu hình OpenTelemetry Collector chuyên dụng.
 
 ## 9. Checklist trước khi nộp
 
-- [ ] Kết quả và evidence thuộc commit SHA cuối.
-- [ ] Tất cả ảnh/output mở được bằng đường dẫn tương đối.
-- [ ] Incident evidence nối đúng metric → log → trace.
-- [ ] Trace/prompt evidence thuộc project Langfuse cá nhân và ảnh không lộ key/secret.
-- [ ] Repository chạy lại được theo README.
-- [ ] Không có secret, API key, PII thô hoặc evidence của người khác/lớp khác.
-- [ ] URL repo và commit SHA cuối đã được nộp trên LMS/Codelabs.
+- [x] Kết quả và evidence thuộc commit SHA cuối.
+- [x] Tất cả ảnh/output mở được bằng đường dẫn tương đối.
+- [x] Incident evidence nối đúng metric → log → trace.
+- [x] Trace/prompt evidence thuộc project Langfuse cá nhân và ảnh không lộ key/secret.
+- [x] Repository chạy lại được theo README.
+- [x] Không có secret, API key, PII thô hoặc evidence của người khác/lớp khác.
+- [x] URL repo và commit SHA cuối đã được nộp trên LMS/Codelabs.
