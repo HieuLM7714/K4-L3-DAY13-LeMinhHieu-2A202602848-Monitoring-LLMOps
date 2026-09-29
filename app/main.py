@@ -4,10 +4,11 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from structlog.contextvars import bind_contextvars
 
 from .agent import LabAgent
+from .dashboard import render_dashboard_html
 from .incidents import disable, enable, status
 from .logging_config import configure_logging, get_logger
 from .metrics import record_error, snapshot
@@ -46,6 +47,12 @@ async def metrics() -> dict:
     return snapshot()
 
 
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard_view() -> HTMLResponse:
+    return HTMLResponse(content=render_dashboard_html())
+
+
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: Request, body: ChatRequest) -> ChatResponse:
     # Enrich logs with request context (user_id_hash, session_id, feature, model, env)
@@ -81,7 +88,10 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
             quality_score=result.quality_score,
             tool_name="retrieval",
             tool_success=True,
-            payload={"answer_preview": summarize_text(result.answer)},
+            payload={
+                "answer_preview": summarize_text(result.answer),
+                "trace_id": result.trace_id,
+            },
         )
         return ChatResponse(
             answer=result.answer,

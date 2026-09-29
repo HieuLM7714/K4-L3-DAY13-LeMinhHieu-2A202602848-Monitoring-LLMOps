@@ -21,6 +21,7 @@ class AgentResult:
     tokens_out: int
     cost_usd: float
     quality_score: float
+    trace_id: str | None = None
 
 
 class LabAgent:
@@ -78,6 +79,9 @@ class LabAgent:
             quality_score = self._heuristic_quality(message, response.text, docs)
             latency_ms = int((time.perf_counter() - started) * 1000)
             cost_usd = self._estimate_cost(response.usage.input_tokens, response.usage.output_tokens)
+            trace_id = None
+            if hasattr(langfuse_client, "get_current_trace_id") and callable(langfuse_client.get_current_trace_id):
+                trace_id = langfuse_client.get_current_trace_id()
 
         metrics.record_request(
             latency_ms=latency_ms,
@@ -96,6 +100,7 @@ class LabAgent:
             tokens_out=response.usage.output_tokens,
             cost_usd=cost_usd,
             quality_score=quality_score,
+            trace_id=trace_id,
         )
 
     def _estimate_cost(self, tokens_in: int, tokens_out: int) -> float:
