@@ -4,13 +4,13 @@
 
 ## 1. Thông tin học viên
 
-- **Họ và tên:**
-- **MSSV:**
+- **Họ và tên:** Lê Minh Hiếu
+- **MSSV:** 2A202602848
 - **Lớp:** K4-L3A
-- **Repository URL:**
+- **Repository URL:** https://github.com/HieuLM7714/K4-L3-DAY13-LeMinhHieu-2A202602848-Monitoring-LLMOps.git
 - **Commit SHA cuối:**
 - **Challenge ID:**
-- **Tên project Langfuse cá nhân:** `day13-k4-l3a-<MSSV>`
+- **Tên project Langfuse cá nhân:** `day13-k4-l3a-2A202602848`
 
 ## 2. Evidence index
 
@@ -37,13 +37,13 @@
 
 | Nội dung | Baseline | Kết quả cuối | Nhận xét |
 |---|---|---|---|
-| `validate_logs.py` | | | |
-| `validate_dashboard.py` | | | |
-| `pytest` | | | |
-| Số traces hợp lệ | | | |
-| Số PII leak | | | |
-| Latency P95 / TTFT P95 | | | |
-| Retrieval success rate | | | |
+| `validate_logs.py` | 30/100 | | Thiếu required fields, correlation_id propagation, enrichment (chưa làm CP1) |
+| `validate_dashboard.py` | 6/6 panel | | Đạt chuẩn cấu hình dashboard ban đầu |
+| `pytest` | 22/22 passed | | Toàn bộ 22 unit tests ban đầu pass |
+| Số traces hợp lệ | 10 | | 10 traces được sinh qua load_test.py |
+| Số PII leak | 0 | | Chưa phát hiện leak thô trong sample |
+| Latency P95 / TTFT P95 | 1168.3 ms / 50.0 ms | | Đo từ 20 lượt responses trong data/logs.jsonl |
+| Retrieval success rate | 100.0% | | 20/20 requests retrieval thành công |
 
 ## 4. Logging và PII
 
